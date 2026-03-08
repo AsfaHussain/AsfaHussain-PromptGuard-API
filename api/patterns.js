@@ -6,6 +6,20 @@ const threatPatterns = [
     regex: /ignore\s+(all\s+)?previous\s+instructions|disregard\s+instructions|override\s+instructions|your\s+new\s+(mission|goal|task|objective)|pretend\s+you\s+are|you\s+are\s+now|from\s+now\s+on|system\s+prompt/gi,
   },
 
+  // CRITICAL: Hindi - Instruction Override
+  {
+    type: 'INSTRUCTION_OVERRIDE',
+    severity: 'CRITICAL',
+    regex: /(निर्देशों\s*को\s*अनदेखा\s*करें)/gi,
+  },
+
+  // CRITICAL: Hindi - System Prompt Leak
+  {
+    type: 'SYSTEM_PROMPT_LEAK',
+    severity: 'CRITICAL',
+    regex: /(सिस्टम\s*प्रॉम्प्ट)|(प्रॉम्प्ट\s*बताओ)/gi,
+  },
+
   // HIGH: Financial Fraud
   {
     type: 'FINANCIAL_FRAUD',
@@ -56,4 +70,17 @@ const threatPatterns = [
   },
 ];
 
-module.exports = { threatPatterns };
+module.exports = { threatPatterns, detectLanguage };
+/**
+ * Detect language composition of input text.
+ * Exported here so both sanitizer.js and agent.js can share the same logic.
+ */
+function detectLanguage(text) {
+  const hindiRange = /[\u0900-\u097F]/;
+  const hasHindi = hindiRange.test(text);
+  const hasEnglish = /[a-zA-Z]/.test(text);
+
+  if (hasHindi && hasEnglish) return 'Mixed (English + Hindi)';
+  if (hasHindi) return 'Hindi';
+  return 'English';
+}

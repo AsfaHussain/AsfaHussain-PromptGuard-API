@@ -25,13 +25,20 @@ app.post('/analyze', async (req, res) => {
   console.log(`📍 Source: ${source_type}\n`);
 
   const analysis = analyzeSecurity(content);
+
+  // Source-based risk adjustment (Issue 4)
+  const sourceAdjustments = { webpage: 10, email: 8, pdf: 5, text: 0 };
+  const sourceKey = (source_type || 'text').toLowerCase();
+  const sourceAdjustment = sourceAdjustments[sourceKey] || 0;
+  const adjustedRiskScore = Math.min(analysis.riskScore + sourceAdjustment, 100);
   const certificateId = `cert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   const response = {
     request_id: requestId,
     certificate_id: certificateId,
     risk_level: analysis.riskLevel,
-    risk_score: analysis.riskScore,
+    risk_score: adjustedRiskScore,
+    source_adjustment: sourceAdjustment,
     confidence: 'HIGH',
     threats_detected: analysis.threats.length,
     threats: analysis.threats,

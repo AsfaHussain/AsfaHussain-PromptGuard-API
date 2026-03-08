@@ -2,6 +2,19 @@ const axios = require('axios');
 const { generateSmartResponse } = require('./smartLLM');
 const crypto = require('crypto');
 
+/**
+ * Detect language composition of input text
+ */
+function detectLanguage(text) {
+  const hindiRange = /[\u0900-\u097F]/;
+  const hasHindi = hindiRange.test(text);
+  const hasEnglish = /[a-zA-Z]/.test(text);
+
+  if (hasHindi && hasEnglish) return 'Mixed (English + Hindi)';
+  if (hasHindi) return 'Hindi';
+  return 'English';
+}
+
 const PROMPTGUARD_API = process.env.PROMPTGUARD_API || 'http://localhost:3000';
 
 class AIAgent {
@@ -27,7 +40,7 @@ class AIAgent {
       this.displayProcessingHeader();
     }
 
-    this.displayRawInput(userInput);
+    this.displayRawInput(userInput, sourceType);
 
     try {
       const securityAnalysis = await this.checkSecurity(userInput, sourceType);
@@ -51,18 +64,40 @@ class AIAgent {
   /**
    * STAGE 1: Log original input received by agent
    */
-  displayRawInput(input) {
+  displayRawInput(input, sourceType = 'user') {
     console.log('\n╔════════════════════════════════════════════════════════════╗');
     console.log('║          📥 STAGE 1: INPUT RECEIVED BY AGENT              ║');
     console.log('╚════════════════════════════════════════════════════════════╝\n');
-    
+
+    // Detect language before pattern detection (Issue 1)
+    const language = detectLanguage(input);
+
+    // Resolve display label for source (Issue 3)
+    const sourceLabel = this.resolveSourceLabel(sourceType);
+
     console.log(`Length: ${input.length} characters`);
     console.log(`Type: ${this.detectInputType(input)}`);
+    console.log(`Source: ${sourceLabel}`);
+    console.log(`Language: ${language}`);
     console.log(`Encoded: ${Buffer.from(input).toString('base64').substring(0, 50)}...\n`);
-    
+
     console.log('📋 Raw Input (before any processing):');
     this.displayRawString(input);
     console.log();
+  }
+
+  /**
+   * Resolve a human-readable source label from sourceType (Issue 3)
+   */
+  resolveSourceLabel(sourceType) {
+    if (!sourceType) return 'CLI_INPUT';
+    const s = sourceType.toLowerCase();
+    if (s === 'user' || s === 'cli_input' || s === 'cli' || s === 'test') return 'CLI_INPUT';
+    if (s.includes('pdf')) return 'PDF';
+    if (s.includes('email')) return 'EMAIL';
+    if (s.includes('web') || s.includes('page')) return 'WEBPAGE';
+    if (s === 'interactive-raw' || s === 'paste-mode') return 'CLI_INPUT';
+    return sourceType.toUpperCase();
   }
 
   /**
@@ -156,9 +191,15 @@ class AIAgent {
     // Threat Detection Results
     console.log('Analysis Results:');
     console.log(`  Risk Level: ${this.getRiskEmoji(analysis.risk_level)} ${analysis.risk_level.toUpperCase()}`);
-    console.log(`  Risk Score: ${analysis.risk_score}/100`);
+
+    // Issue 4: Show Base / Adjustment / Final risk scores
+    const sourceAdjustment = analysis.source_adjustment || 0;
+    const baseScore = analysis.risk_score - sourceAdjustment;
+    console.log(`  Base Risk Score: ${baseScore}`);
+    console.log(`  Source Adjustment: +${sourceAdjustment}`);
+    console.log(`  Final Risk Score: ${analysis.risk_score}`);
     console.log(`  Threats: ${analysis.threats_detected}`);
-    
+
     if (analysis.threat_details && analysis.threat_details.length > 0) {
       console.log(`\n  Detected Threats:`);
       analysis.threat_details.forEach((threat, idx) => {

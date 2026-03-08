@@ -2,6 +2,11 @@ const readline = require('readline');
 const fs = require('fs');
 const path = require('path');
 
+// ── New: Multi-source handlers ──────────────────────────────────────────────
+const PDFHandler = require('./handlers/pdfHandler');
+const EmailHandler = require('./handlers/emailHandler');
+const WebpageHandler = require('./handlers/webpageHandler');
+
 /**
  * RawInputHandler: Reads stdin without shell interpretation
  * Handles special characters like <, >, |, &, `, etc safely
@@ -10,7 +15,55 @@ class RawInputHandler {
   constructor() {
     this.rl = null;
     this.testInputs = [];
+
+    // ── New: instantiate source handlers ───────────────────────────────────
+    this.pdfHandler = new PDFHandler();
+    this.emailHandler = new EmailHandler();
+    this.webpageHandler = new WebpageHandler();
   }
+
+  // ── NEW: processStructuredInput ──────────────────────────────────────────
+  /**
+   * Route structured input objects to the appropriate source handler.
+   * Returns a normalized { source, content, metadata } object.
+   *
+   * Supported types: "pdf" | "email" | "webpage" | "text"
+   *
+   * This method does NOT interfere with existing CLI input modes.
+   *
+   * @param {Object} data - Structured input object containing a `type` field
+   * @returns {{ source: string, content: string, metadata: Object }}
+   */
+  processStructuredInput(data) {
+    if (!data || typeof data !== 'object') {
+      throw new Error('processStructuredInput: input must be a non-null object');
+    }
+
+    const type = (data.type || 'text').toLowerCase();
+
+    switch (type) {
+      case 'pdf':
+        return this.pdfHandler.normalize(data);
+
+      case 'email':
+        return this.emailHandler.normalize(data);
+
+      case 'webpage':
+        return this.webpageHandler.normalize(data);
+
+      case 'text':
+      default:
+        // Direct pass-through for plain text
+        return {
+          source: 'text',
+          content: data.text || data.content || '',
+          metadata: {
+            processedAt: new Date().toISOString(),
+          },
+        };
+    }
+  }
+  // ── END NEW ───────────────────────────────────────────────────────────────
 
   /**
    * Create readline interface for raw input
